@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Product Inventory Information System</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+
+    h2 {
+      text-align: center;
+    }
+
+    input, button {
+      margin: 5px;
+      padding: 5px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+
+    .zero-stock {
+      color: red;
+      font-weight: bold;
+    }
+
+    .card {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin: 5px;
+      display: inline-block;
+      width: 200px;
+    }
+
+    #summary {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Product Inventory Information System</h2>
+
+<!-- FORM INPUTS -->
+<input type="text" id="name" placeholder="Item Name">
+<input type="number" id="qty" placeholder="Quantity">
+<input type="number" id="price" placeholder="Price">
+
+<br>
+
+<button onclick="addItem()">Add</button>
+<button onclick="filterLowStock()">Filter Low Stock</button>
+<button onclick="sortByName()">Sort by Name</button>
+<button onclick="sortByPrice()">Sort by Price</button>
+<button onclick="resetList()">Reset</button>
+<button onclick="toggleView()">Toggle View</button>
+
+<br>
+
+<input type="text" id="search" placeholder="Live Search" onkeyup="searchItems()">
+
+<!-- DISPLAY AREA -->
+<div id="list"></div>
+
+<!-- SUMMARY -->
+<div id="summary"></div>
+
+<script>
+// ===============================
+// PRODUCT INVENTORY SYSTEM
+// ===============================
+
+// Array to store products
+let inventory = [];
+
+// Toggle variables
+let isTableView = true;
+let sortNameAsc = true;
+let sortPriceAsc = true;
+
+// ===============================
+// LOAD PRODUCTS FROM DATABASE
+// ===============================
+async function loadProducts() {
+  try {
+    const response = await fetch("http://localhost:3000/products");
+    inventory = await response.json();
+
+    renderList(inventory);
+    updateSummary();
+  } catch (error) {
+    console.error(error);
+    alert("Cannot connect to Node.js server.");
+  }
+}
+
+// ===============================
+// ADD PRODUCT
+// ===============================
+async function addItem() {
+  const name = document.getElementById("name").value.trim();
+  const qty = parseInt(document.getElementById("qty").value);
+  const price = parseFloat(document.getElementById("price").value);
+
+  if (!name || isNaN(qty) || isNaN(price)) {
+    alert("Please fill in all fields correctly.");
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:3000/products", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name,
+        qty,
+        price
+      })
+    });
+
+    const result = await response.json();
+
+    alert(result.message);
+
+    document.getElementById("name").value = "";
+    document.getElementById("qty").value = "";
+    document.getElementById("price").value = "";
+
+    loadProducts();
+
+  } catch (error) {
+    console.error(error);
+    alert("Failed to save product.");
+  }
+}
+
+// ===============================
+// FILTER LOW STOCK
+// ===============================
+function filterLowStock() {
+  const filtered = inventory.filter(item => item.qty < 5);
+  renderList(filtered);
+}
+
+// ===============================
+// SORT BY NAME
+// ===============================
+function sortByName() {
+  inventory.sort((a, b) =>
+    sortNameAsc
+      ? a.name.localeCompare(b.name)
+      : b.name.localeCompare(a.name)
+  );
+
+  sortNameAsc = !sortNameAsc;
+  renderList(inventory);
+}
+
+// ===============================
+// SORT BY PRICE
+// ===============================
+function sortByPrice() {
+  inventory.sort((a, b) =>
+    sortPriceAsc
+      ? a.price - b.price
+      : b.price - a.price
+  );
+
+  sortPriceAsc = !sortPriceAsc;
+  renderList(inventory);
+}
+
+// ===============================
+// DELETE (TEMPORARY)
+// ===============================
+function deleteItem(index) {
+  if (confirm("Are you sure?")) {
+    inventory.splice(index, 1);
+    renderList(inventory);
+    updateSummary();
+  }
+}
+
+// ===============================
+// SEARCH
+// ===============================
+function searchItems() {
+  const keyword = document
+    .getElementById("search")
+    .value
+    .toLowerCase();
+
+  const results = inventory.filter(item =>
+    item.name.toLowerCase().includes(keyword)
+  );
+
+  renderList(results);
+}
+
+// ===============================
+// RESET
+// ===============================
+function resetList() {
+  renderList(inventory);
+}
+
+// ===============================
+// CART OBJECT
+// ===============================
+const cart = {
+  items: [],
+
+  add(item, qty) {
+    if (qty > item.qty) {
+      return "Not enough stock available.";
+    }
+
+    this.items.push({ ...item, qty });
+
+    return "Item added to cart.";
+  },
+
+  checkout() {
+    let total = 0;
+
+    this.items.forEach(i => {
+      total += i.qty * i.price;
+    });
+
+    let tax = total * 0.12;
+    let discount = total > 5000 ? total * 0.10 : 0;
+    let finalTotal = total + tax - discount;
+
+    return `
+Subtotal: ₱${total.toFixed(2)}
+Tax: ₱${tax.toFixed(2)}
+Discount: ₱${discount.toFixed(2)}
+Final Total: ₱${finalTotal.toFixed(2)}
+`;
+  }
+};
+
+// ===============================
+// RENDER TABLE/CARDS
+// ===============================
+function renderList(data) {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  if (isTableView) {
+
+    let table = `
+    <table>
+      <tr>
+        <th>Name</th>
+        <th>Quantity</th>
+        <th>Price</th>
+        <th>Action</th>
+      </tr>`;
+
+    data.forEach((item, index) => {
+
+      table += `
+      <tr class="${item.qty == 0 ? "zero-stock" : ""}">
+        <td>${item.name}</td>
+        <td>${item.qty}</td>
+        <td>₱${item.price}</td>
+        <td>
+          <button onclick="deleteItem(${item.id})">
+            Delete
+          </button>
+        </td>
+      </tr>`;
+
+    });
+
+    table += "</table>";
+
+    list.innerHTML = table;
+
+  } else {
+
+    data.forEach((item, index) => {
+
+      list.innerHTML += `
+      <div class="card ${item.qty == 0 ? "zero-stock" : ""}">
+        <p><b>${item.name}</b></p>
+        <p>Qty: ${item.qty}</p>
+        <p>Price: ₱${item.price}</p>
+
+        <button onclick="deleteItem(${item.id})">
+          Delete
+        </button>
+
+      </div>`;
+
+    });
+
+  }
+}
+
+// ===============================
+// TOGGLE VIEW
+// ===============================
+function toggleView() {
+  isTableView = !isTableView;
+  renderList(inventory);
+}
+
+// ===============================
+// SUMMARY
+// ===============================
+function updateSummary() {
+
+  const summary = document.getElementById("summary");
+
+  let totalItems = inventory.length;
+
+  let totalValue = inventory.reduce(
+    (sum, item) => sum + item.qty * item.price,
+    0
+  );
+
+  summary.innerHTML = `
+Total Products: ${totalItems}<br>
+Total Inventory Value: ₱${totalValue.toFixed(2)}
+`;
+
+}
+
+// ===============================
+// LOAD DATABASE WHEN PAGE OPENS
+// ===============================
+loadProducts();
+
+</script>
+
+</body>
+</html>
